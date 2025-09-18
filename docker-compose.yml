@@ -5,7 +5,7 @@ services:
     build: ./dispatcher
     container_name: webhook_dispatcher
     ports:
-      - "3000:3000"
+      - 3000
     environment:
       VERIFY_TOKEN: ${VERIFY_TOKEN}
       REDIS_URL: redis://redis:6379
