@@ -7,8 +7,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - VERIFY_TOKEN=process.env.VERIFY_TOKEN
-      - REDIS_URL=redis://redis:6379
+      VERIFY_TOKEN: ${VERIFY_TOKEN}
+      REDIS_URL: redis://redis:6379
     depends_on:
       - redis
     restart: always
