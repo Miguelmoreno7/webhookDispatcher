@@ -41,6 +41,6 @@ services:
     networks:
       - dokploy-network
 
-network:
+networks:
   dokplot-network:
     external: true
