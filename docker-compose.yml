@@ -16,7 +16,7 @@ services:
       - dokploy-network
     labels:
       - traefik.enable=true
-      - traefik.http.routers.dispatcher.rule=Host('webhook.moviatech.com.mx')
+      - traefik.http.routers.dispatcher.rule=Host(`webhook.moviatech.com.mx`)
       - traefik.http.routers.dispatcher.entrypoints=websecure
       - traefik.http.routers.dispatcher.tls.certResolver=letsencrypt
       - traefik.http.services.dispatcher.loadbalancer.server.port=3000
