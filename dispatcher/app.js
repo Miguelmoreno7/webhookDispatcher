@@ -14,7 +14,7 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const redis = new Redis(process.env.REDIS_URL);
 
 // Meta webhook verification
-app.get('/', (req, res) => {
+app.get('/webhook', (req, res) => {
   const { 'hub.mode': mode, 'hub.challenge': challenge, 'hub.verify_token': token } = req.query;
   
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
