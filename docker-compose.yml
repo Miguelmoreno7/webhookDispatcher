@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  dispatcher:
+    build: ./dispatcher
+    container_name: webhook_dispatcher
+    ports:
+      - "3000:3000"
+    environment:
+      - VERIFY_TOKEN=your_verify_token
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    restart: always
+
+  worker:
+    build: ./worker
+    container_name: webhook_worker
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    restart: always
+
+  redis:
+    image: redis:alpine
+    container_name: redis_queue
+    ports:
+      - "6379:6379"
+    restart: always
