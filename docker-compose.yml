@@ -12,6 +12,14 @@ services:
     depends_on:
       - redis
     restart: always
+    networks:
+      - dokploy-network
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dispatcher.rule=Host('webhook.moviatech.com.mx')
+      - traefik.http.routers.dispatcher.entrypoints=websecure
+      - traefik.http.routers.dispatcher.tls.certResolver=letsencrypt
+      - traefik.http.services.dispatcher.loadbalancer.server.port=3000
 
   worker:
     build: ./worker
@@ -21,6 +29,8 @@ services:
     depends_on:
       - redis
     restart: always
+    networks:
+      - dokploy-network
 
   redis:
     image: redis:alpine
@@ -28,3 +38,9 @@ services:
     ports:
       - "6379:6379"
     restart: always
+    networks:
+      - dokploy-network
+
+network:
+  dokplot-network:
+    external: true
