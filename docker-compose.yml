@@ -7,7 +7,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - VERIFY_TOKEN=your_verify_token
+      - VERIFY_TOKEN=process.env.VERIFY_TOKEN
       - REDIS_URL=redis://redis:6379
     depends_on:
       - redis
