@@ -8,17 +8,15 @@ const Redis = require('ioredis');
 const app = express();
 
 // Middleware to parse JSON bodies
-app.use(bodyParser.json());
+app.use(express.json());
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const redis = new Redis(process.env.REDIS_URL);
 
 // Meta webhook verification
-app.get('/webhook', (req, res) => {
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
-
+app.get('/', (req, res) => {
+  const { 'hub.mode': mode, 'hub.challenge': challenge, 'hub.verify_token': token } = req.query;
+  
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
     console.log('Webhook verified');
     res.status(200).send(challenge);
