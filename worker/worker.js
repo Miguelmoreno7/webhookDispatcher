@@ -40,7 +40,7 @@ async function processEvent(event) {
       return;
     }
     if (value?.statuses?.length > 0) {
-      console.log('Skipping message event with statuses:', value.statuses);
+      console.log('Skipping message event');
       return;
     }
 
