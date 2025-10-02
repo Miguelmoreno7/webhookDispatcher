@@ -25,7 +25,11 @@ services:
     build: ./worker
     container_name: webhook_worker
     environment:
-      - REDIS_URL=redis://redis:6379
+      REDIS_URL: redis://redis:6379
+      DB_HOST: ${DB_HOST}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
     depends_on:
       - redis
     restart: always
