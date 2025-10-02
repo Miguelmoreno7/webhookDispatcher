@@ -3,16 +3,43 @@ const axios = require('axios');
 
 const redis = new Redis(process.env.REDIS_URL);
 
+//Connect to the database
+const dbConfig = {
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+};
+
+
+sync function getWebhooksForPhone(phoneNumberId) {
+  const connection = await mysql.createConnection(dbConfig);
+  const [rows] = await connection.execute(
+    'SELECT webhook_url FROM wp_wa_webhooks WHERE phone_number_id = ?',
+    [phoneNumberId]
+  );
+  await connection.end();
+  return rows.map(row => row.webhook_url);
+}
+
+
 async function processEvent(event) {
   try {
     const parsed = JSON.parse(event);
-    const clientWebhook = parsed.clientWebhook; // You should include this in the original event
-    console.log(parsed);
-    if (clientWebhook) {
-      await axios.post(clientWebhook, parsed);
-      console.log(`Event forwarded to ${clientWebhook}`);
-    } else {
-      console.warn('No client webhook specified in event');
+    
+    // Extract phone number ID from the first entry
+    const entry = parsed.entry?.[0];
+    const phoneNumberId = entry?.id;
+
+    const webhookUrls = await getWebhooksForPhone(phoneNumberId);
+
+    for (const url of webhookUrls) {
+      try {
+        await axios.post(url, parsed);
+        console.log(`Event forwarded to ${url}`);
+      } catch (err) {
+        console.error(`Failed to send event to ${url}:`, err.message);
+      }
     }
   } catch (err) {
     console.error('Error processing event:', err);
