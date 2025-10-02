@@ -12,7 +12,7 @@ const dbConfig = {
 };
 
 
-sync function getWebhooksForPhone(phoneNumberId) {
+async function getWebhooksForPhone(phoneNumberId) {
   const connection = await mysql.createConnection(dbConfig);
   const [rows] = await connection.execute(
     'SELECT webhook_url FROM wp_wa_webhooks WHERE phone_number_id = ?',
