@@ -11,7 +11,7 @@ const dbConfig = {
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
 };
-console.log(dbConfig);
+
 
 async function getWebhooksForPhone(phoneNumberId) {
   const connection = await mysql.createConnection(dbConfig);
@@ -36,6 +36,7 @@ async function processEvent(event) {
     //Check if the event is a message
     if (fieldType !== 'messages') {
       console.log(`Skipping event with field type: ${fieldType}`);
+      console.log(parsed);
       return;
     }
 
