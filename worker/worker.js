@@ -32,6 +32,12 @@ async function processEvent(event) {
     // Extract phone number ID from the first entry
     const entry = parsed.entry?.[0];
     const phoneNumberId = entry?.id;
+    const fieldType = entry?.changes?.[0]?.field;
+    //Check if the event is a message
+    if (fieldType !== 'messages') {
+      console.log(`Skipping event with field type: ${fieldType}`);
+      return;
+    }
 
     const webhookUrls = await getWebhooksForPhone(phoneNumberId);
 
