@@ -33,6 +33,7 @@ async function processEvent(event) {
     const entry = parsed.entry?.[0];
     const phoneNumberId = entry?.id;
     const fieldType = entry?.changes?.[0]?.field;
+    const value = entry?.changes?.[0]?.value;
     //Check if the event is a message
     if (fieldType !== 'messages') {
       console.log(`Skipping event with field type: ${fieldType}`);
@@ -44,7 +45,7 @@ async function processEvent(event) {
 
     for (const url of webhookUrls) {
       try {
-        await axios.post(url, parsed);
+        await axios.post(url, value);
         console.log(`Event forwarded to ${url}`);
       } catch (err) {
         console.error(`Failed to send event to ${url}:`, err.message);
