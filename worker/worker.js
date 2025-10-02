@@ -35,20 +35,24 @@ async function processEvent(event) {
     const fieldType = entry?.changes?.[0]?.field;
     const value = entry?.changes?.[0]?.value;
     //Check if the event is a message
-    if (fieldType === 'messages') {
-      const webhookUrls = await getWebhooksForPhone(phoneNumberId);
-      console.log(`Field type: ${fieldType}`);
-      
-      for (const url of webhookUrls) {
-        try {
-          await axios.post(url, value);
-          console.log(`Event forwarded to ${url}`);
-        } catch (err) {
-          console.error(`Failed to send event to ${url}:`, err.message);
-        }
-      }
-    } else {
+    if (fieldType !== 'messages') {
       console.log(`Skipping event with field type: ${fieldType}`);
+      return;
+    }
+    if (value?.statuses?.length > 0) {
+      console.log('Skipping message event with statuses:', value.statuses);
+      return;
+    }
+
+    const webhookUrls = await getWebhooksForPhone(phoneNumberId);
+      
+    for (const url of webhookUrls) {
+      try {
+        await axios.post(url, value);
+        console.log(`Event forwarded to ${url}`);
+      } catch (err) {
+        console.error(`Failed to send event to ${url}:`, err.message);
+      }
     }
   } catch (err) {
     console.error('Error processing event:', err);
