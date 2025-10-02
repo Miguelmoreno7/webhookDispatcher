@@ -1,5 +1,6 @@
 const Redis = require('ioredis');
 const axios = require('axios');
+const mysql = require('mysql2/promise');
 
 const redis = new Redis(process.env.REDIS_URL);
 
