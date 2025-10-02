@@ -19,6 +19,7 @@ async function getWebhooksForPhone(phoneNumberId) {
     'SELECT webhook_url FROM wp_wa_webhooks WHERE phone_number_id = ?',
     [phoneNumberId]
   );
+  console.log(rows);
   await connection.end();
   return rows.map(row => row.webhook_url);
 }
