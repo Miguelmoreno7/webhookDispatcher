@@ -37,7 +37,8 @@ async function processEvent(event) {
     //Check if the event is a message
     if (fieldType === 'messages') {
       const webhookUrls = await getWebhooksForPhone(phoneNumberId);
-  
+      console.log(`Field type: ${fieldType}`);
+      
       for (const url of webhookUrls) {
         try {
           await axios.post(url, value);
