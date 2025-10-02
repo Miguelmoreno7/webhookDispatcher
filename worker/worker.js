@@ -7,7 +7,7 @@ async function processEvent(event) {
   try {
     const parsed = JSON.parse(event);
     const clientWebhook = parsed.clientWebhook; // You should include this in the original event
-
+    console.log(parsed);
     if (clientWebhook) {
       await axios.post(clientWebhook, parsed);
       console.log(`Event forwarded to ${clientWebhook}`);
