@@ -11,7 +11,7 @@ const dbConfig = {
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
 };
-
+console.log(dbConfig);
 
 async function getWebhooksForPhone(phoneNumberId) {
   const connection = await mysql.createConnection(dbConfig);
