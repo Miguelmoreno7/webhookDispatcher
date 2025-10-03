@@ -39,7 +39,7 @@ services:
   non_message_worker:
     build: ./non_message_worker
     container_name: nonmessage_worker
-    environent:
+    environment:
       REDIS_URL: redis://redis:6379
       DB_HOST: ${DB_HOST}
       DB_USER: ${DB_USER}
