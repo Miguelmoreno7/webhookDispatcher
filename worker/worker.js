@@ -29,7 +29,6 @@ async function getWebhooksForPhone(phoneNumberId) {
     'SELECT webhook_url, message_received, message_sent, message_delivered, message_read FROM wp_wa_webhooks WHERE waba_id = ?',
     [phoneNumberId]
   );
-  console.log(rows);
   await connection.end();
   return rows;
 }
