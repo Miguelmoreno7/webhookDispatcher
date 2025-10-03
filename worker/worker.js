@@ -69,7 +69,7 @@ async function processEvent(event) {
     const webhookUrls = await getWebhooksForPhone(phoneNumberId);
       
     for (const url of webhookUrls) {
-      if (webhook[eventType]) {
+      if (url[eventType]) {
         await forwardEvent(webhook.webhook_url, value, eventType);
       }
     }
