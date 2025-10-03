@@ -70,7 +70,7 @@ async function processEvent(event) {
       
     for (const url of webhookUrls) {
       if (url[eventType]) {
-        await forwardEvent(webhook.webhook_url, value, eventType);
+        await forwardEvent(url.webhook_url, value, eventType);
       }
     }
   } catch (err) {
