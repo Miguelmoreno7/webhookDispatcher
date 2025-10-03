@@ -35,7 +35,22 @@ services:
     restart: always
     networks:
       - dokploy-network
-
+      
+  non_message_worker:
+    build: ./non_message_worker
+    container_name: nonmessage_worker
+    environent:
+      REDIS_URL: redis://redis:6379
+      DB_HOST: ${DB_HOST}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+    depends_on:
+      - redis
+    restart: always
+    networks:
+      - dokploy-network
+      
   redis:
     image: redis:alpine
     container_name: redis_queue
