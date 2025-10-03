@@ -12,16 +12,26 @@ const dbConfig = {
   database: process.env.DB_NAME,
 };
 
+//Function to send the event to the webhook
+async function forwardEvent(url, payload, eventType) {
+  try {
+    await axios.post(url, payload);
+    console.log(`Event ${eventType} forwarded to ${url}`);
+  } catch (err) {
+    console.error(`Failed to send ${eventType} to ${url}:`, err.message);
+  }
+}
 
+//Function to get the Webhooks from the database that matches the phone id
 async function getWebhooksForPhone(phoneNumberId) {
   const connection = await mysql.createConnection(dbConfig);
   const [rows] = await connection.execute(
-    'SELECT webhook_url FROM wp_wa_webhooks WHERE waba_id = ?',
+    'SELECT webhook_url, message_received, message_sent, message_delivered, message_read FROM wp_wa_webhooks WHERE waba_id = ?',
     [phoneNumberId]
   );
   console.log(rows);
   await connection.end();
-  return rows.map(row => row.webhook_url);
+  return rows;
 }
 
 
@@ -34,25 +44,32 @@ async function processEvent(event) {
     const phoneNumberId = entry?.id;
     const fieldType = entry?.changes?.[0]?.field;
     const value = entry?.changes?.[0]?.value;
+
+    let eventType = null;
+    
     //Check if the event is a message
     if (fieldType !== 'messages') {
       console.log(`Skipping event with field type: ${fieldType}`);
       return;
     }
     if (value?.statuses?.length > 0) {
-      console.log('Skipping message event');
-      console.log(value);
-      return;
+      const status = value.statuses[0].status;
+      switch (status) {
+        case 'sent': eventType = 'message_sent'; break;
+        case 'delivered': eventType = 'message_delivered'; break;
+        case 'read': eventType = 'message_read'; break;
+        default:
+          console.log(`Unknown status: ${status}`);
+          return;
+    } else {
+      eventType = 'message_received';
     }
 
     const webhookUrls = await getWebhooksForPhone(phoneNumberId);
       
     for (const url of webhookUrls) {
-      try {
-        await axios.post(url, value);
-        console.log(`Event forwarded to ${url}`);
-      } catch (err) {
-        console.error(`Failed to send event to ${url}:`, err.message);
+      if (webhook[eventType]) {
+        await forwardEvent(webhook.webhook_url, value, eventType);
       }
     }
   } catch (err) {
