@@ -61,6 +61,7 @@ async function processEvent(event) {
         default:
           console.log(`Unknown status: ${status}`);
           return;
+      }
     } else {
       eventType = 'message_received';
     }
