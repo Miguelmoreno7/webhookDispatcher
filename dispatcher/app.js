@@ -30,9 +30,18 @@ app.post('/webhook', async (req, res) => {
   const body = req.body;
   
 if (body.object) {
-    await redis.lpush('events', JSON.stringify(body));
-    console.log('Event received and pushed to Redis');
-    res.sendStatus(200);
+    const fieldType = body.entry?.[0].changes?.[0]?.field; 
+
+    if (fieldType !== 'messages') {
+      await redis.lpush('non_message', JSON.stringify(body));
+      console.log('Non Message received and pushed to Redis');
+      res.sendStatus(200);
+    } else {
+      await redis.lpush('events', JSON.stringify(body));
+      console.log('Message Event received and pushed to Redis');
+      res.sendStatus(200);    
+    }
+  
   } else {
     res.sendStatus(404);
   }
