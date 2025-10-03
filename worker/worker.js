@@ -41,6 +41,7 @@ async function processEvent(event) {
     }
     if (value?.statuses?.length > 0) {
       console.log('Skipping message event');
+      console.log(value);
       return;
     }
 
