@@ -12,27 +12,39 @@ const dbConfig = {
   database: process.env.DB_NAME,
 };
 
-//Function to send the event to the webhook
-async function forwardEvent(url, payload, eventType) {
+//Function to get the update the database that matches the phone id
+async function updateDataBase(phoneNumberId, eventValue) {
+  const connection = await mysql.createConnection(dbConfig);
   try {
-    await axios.post(url, payload);
-    console.log(`Event ${eventType} forwarded to ${url}`);
-  } catch (err) {
-    console.error(`Failed to send ${eventType} to ${url}:`, err.message);
+    const [result] = await connection.execute(
+      'UPDATE wp_wa_webhooks SET status = ? WHERE waba_id = ?',
+      [eventValue, phoneNumberId]
+    );
+    console.log(`Updated status for waba_id ${phoneNumberId}:`, result);
+  } catch (error) {
+    console.error('Error updating status:', error);
+  } finally {
+    await connection.end();
+  }
+
+}
+
+//Function to delete the row in case phone number is eliminated from the app
+async function deleteRowDataBase(phoneNumberId) {
+  const connection = await mysql.createConnection(dbConfig);
+
+  try {
+    const [result] = await connection.execute(
+      'DELETE FROM wp_wa_webhooks WHERE waba_id = ?',
+      [phoneNumberId]
+    );
+    console.log(`Deleted row for waba_id ${phoneNumberId}:`, result);
+  } catch (error) {
+    console.error('Error deleting row:', error);
+  } finally {
+    await connection.end();
   }
 }
-
-//Function to get the Webhooks from the database that matches the phone id
-async function getWebhooksForPhone(phoneNumberId) {
-  const connection = await mysql.createConnection(dbConfig);
-  const [rows] = await connection.execute(
-    'SELECT webhook_url, message_received, message_sent, message_delivered, message_read FROM wp_wa_webhooks WHERE waba_id = ?',
-    [phoneNumberId]
-  );
-  await connection.end();
-  return rows;
-}
-
 
 async function processEvent(event) {
   try {
@@ -45,33 +57,21 @@ async function processEvent(event) {
     const value = entry?.changes?.[0]?.value;
 
     let eventType = null;
-    
-    //Check if the event is a message
-    if (fieldType !== 'messages') {
-      console.log(`Skipping event with field type: ${fieldType}`);
-      return;
-    }
-    if (value?.statuses?.length > 0) {
-      const status = value.statuses[0].status;
-      switch (status) {
-        case 'sent': eventType = 'message_sent'; break;
-        case 'delivered': eventType = 'message_delivered'; break;
-        case 'read': eventType = 'message_read'; break;
-        default:
-          console.log(`Unknown status: ${status}`);
-          return;
-      }
-    } else {
-      eventType = 'message_received';
+
+    switch(fieldType) {
+      case 'account_update': 
+        const eventValue = value.event;
+        const blockedEvents = ['ACCOUNT_DELETED', 'PARTNER_REMOVED', 'PARTNER_APP_UNINSTALLED'];
+        if (blockedEvents.includes(eventValue)) {
+          await deleteRowDataBase(phoneNumberId);
+        } else {
+          await updateDataBase(phoneNumberId, eventValue);
+        }
+        break;
+      default:
+        console.log('Not valid field type');
     }
 
-    const webhookUrls = await getWebhooksForPhone(phoneNumberId);
-      
-    for (const url of webhookUrls) {
-      if (url[eventType]) {
-        await forwardEvent(url.webhook_url, value, eventType);
-      }
-    }
   } catch (err) {
     console.error('Error processing event:', err);
   }
@@ -81,7 +81,7 @@ async function startWorker() {
   console.log('Worker started');
 
   while (true) {
-    const event = await redis.rpop('events');
+    const event = await redis.rpop('non_message');
     if (event) {
       await processEvent(event);
     } else {
