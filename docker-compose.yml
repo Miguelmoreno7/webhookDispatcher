@@ -8,7 +8,7 @@ services:
       - 3000
     environment:
       VERIFY_TOKEN: ${VERIFY_TOKEN}
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:RealUnited93@redis:6379
     depends_on:
       - redis
     restart: always
@@ -25,7 +25,7 @@ services:
     build: ./worker
     container_name: webhook_worker
     environment:
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:RealUnited93@redis:6379
       DB_HOST: ${DB_HOST}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
@@ -40,7 +40,7 @@ services:
     build: ./non_message_worker
     container_name: nonmessage_worker
     environment:
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:RealUnited93@redis:6379
       DB_HOST: ${DB_HOST}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
