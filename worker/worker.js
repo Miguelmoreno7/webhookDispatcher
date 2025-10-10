@@ -53,6 +53,7 @@ async function processEvent(event) {
     }
     if (value?.statuses?.length > 0) {
       const status = value.statuses[0].status;
+      console.log(`Status: ${status}`);
       switch (status) {
         case 'sent': eventType = 'message_sent'; break;
         case 'delivered': eventType = 'message_delivered'; break;
