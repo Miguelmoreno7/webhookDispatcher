@@ -5,12 +5,12 @@ const mysql = require('mysql2/promise');
 const redis = new Redis(process.env.REDIS_URL);
 
 //Connect to the database
-const dbConfig = {
+const pool = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-};
+});
 
 //Function to send the event to the webhook
 async function forwardEvent(url, payload, eventType) {
@@ -24,15 +24,19 @@ async function forwardEvent(url, payload, eventType) {
 
 //Function to get the Webhooks from the database that matches the phone id
 async function getWebhooksForPhone(phoneNumberId) {
-  const connection = await mysql.createConnection(dbConfig);
-  const [rows] = await connection.execute(
+  const [rows] = await pool.execute(
     'SELECT webhook_url, message_received, message_sent, message_delivered, message_read FROM wp_wa_webhooks WHERE waba_id = ?',
     [phoneNumberId]
   );
-  await connection.end();
   return rows;
 }
 
+async function updateMessagesSent(phoneNumberId) {
+  await pool.execute(
+        `UPDATE wp_wa_configurations SET messages_sent = messages_sent + 1 WHERE waba_id = ?`,
+        [phoneNumberId]
+      );
+}
 
 async function processEvent(event) {
   try {
@@ -55,7 +59,10 @@ async function processEvent(event) {
       const status = value.statuses[0].status;
       console.log(`Status: ${status}`);
       switch (status) {
-        case 'sent': eventType = 'message_sent'; break;
+        case 'sent': 
+          eventType = 'message_sent'; 
+          await updateMessagesSent(phoneNumberId);
+          break;
         case 'delivered': eventType = 'message_delivered'; break;
         case 'read': eventType = 'message_read'; break;
         default:
