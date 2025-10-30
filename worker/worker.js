@@ -24,6 +24,17 @@ async function forwardEvent(url, payload, eventType) {
 
 //Function to get the Webhooks from the database that matches the phone id
 async function getWebhooksForPhone(phoneNumberId) {
+  const [configRows] = await pool.execute(
+    'SELECT is_locked, is_active FROM wp_wa_configurations WHERE waba_id = ? LIMIT 1',
+    [phoneNumberId]
+  );
+
+  if (configRows.length === 0 || configRows[0].is_locked !== 0 || configRows[0].is_active !== 1) {
+    // WABA is either locked or inactive — block webhook processing
+    console.error(`WABA locked or inactive: ${phoneNumberId}`);
+    return [];
+  }
+
   const [rows] = await pool.execute(
     'SELECT webhook_url, message_received, message_sent, message_delivered, message_read FROM wp_wa_webhooks WHERE waba_id = ?',
     [phoneNumberId]
@@ -33,9 +44,12 @@ async function getWebhooksForPhone(phoneNumberId) {
 
 async function updateMessagesSent(phoneNumberId) {
   await pool.execute(
-        `UPDATE wp_wa_configurations SET messages_sent = messages_sent + 1 WHERE waba_id = ?`,
-        [phoneNumberId]
-      );
+    `UPDATE wp_wa_configurations
+     SET messages_sent = messages_sent + 1,
+         is_locked = CASE WHEN messages_sent + 1 >= 250 THEN 1 ELSE is_locked END
+     WHERE waba_id = ?`,
+    [phoneNumberId]
+  );
 }
 
 async function processEvent(event) {
