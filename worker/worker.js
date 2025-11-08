@@ -42,14 +42,47 @@ async function getWebhooksForPhone(phoneNumberId) {
   return rows;
 }
 
+//Function to update Messages Sent 
 async function updateMessagesSent(phoneNumberId) {
-  await pool.execute(
-    `UPDATE wp_wa_configurations
-     SET messages_sent = messages_sent + 1,
-         is_locked = CASE WHEN messages_sent + 1 >= 250 THEN 1 ELSE is_locked END
-     WHERE waba_id = ?`,
-    [phoneNumberId]
+  //Extract user_id
+  const [configRows] = await pool.execute(
+      `SELECT user_id FROM wp_wa_configurations WHERE waba_id = ?`,
+      [phoneNumberId]
   );
+  
+  const { user_id } = configRows[0];
+
+  // 2. Check subscription plan for this user
+  const [subRows] = await pool.execute(
+      `SELECT subscription_plan_id FROM wp_pms_member_subscriptions WHERE user_id = ? ORDER BY id DESC LIMIT 1`,
+      [user_id]
+  );
+
+  //Get subscription plan id
+  const subscriptionPlanId = subRows[0].subscription_plan_id;
+
+  //If admins set subscription plan 1
+  if (user_id === 6 || user_id === 2) {
+    subscriptionPlanId = 1;
+  }
+  
+  //If bronze, restrict messages
+  if (subscriptionPlanId === 2986) {
+    await pool.execute(
+      `UPDATE wp_wa_configurations
+       SET messages_sent = messages_sent + 1,
+           is_locked = CASE WHEN messages_sent + 1 >= 250 THEN 1 ELSE is_locked END
+       WHERE waba_id = ?`,
+      [phoneNumberId]
+    );
+  } else {
+    await pool.execute(
+      `UPDATE wp_wa_configurations
+       SET messages_sent = messages_sent + 1,
+       WHERE waba_id = ?`,
+      [phoneNumberId]
+    );
+  }
 }
 
 async function processEvent(event) {
