@@ -111,8 +111,8 @@ async function updateMessagesSent(phoneNumberId) {
 async function processEvent(event) {
   try {
     // const parsed = JSON.parse(event);
-    const parsed = JSON.parse(envelope.raw);  // full Meta payload
     const envelope = JSON.parse(event);       // { raw, sig, contentType, receivedAt }
+    const parsed = JSON.parse(envelope.raw);  // full Meta payload
     // Extract phone number ID from the first entry
     const entry = parsed.entry?.[0];
     const phoneNumberId = entry?.id;
