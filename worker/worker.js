@@ -16,7 +16,7 @@ const pool = mysql.createPool({
 async function forwardEvent(url, payload, eventType, metaCtx) {
   try {
     // Chatwoot needs RAW body + signature header (if present)
-    if (url && url.includes('chatwoot')) {
+    if (url && url.includes('chat.moviatech.com')) {
       const headers = {
         'Content-Type': metaCtx?.contentType || 'application/json',
       };
