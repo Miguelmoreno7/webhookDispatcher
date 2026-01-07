@@ -13,8 +13,31 @@ const pool = mysql.createPool({
 });
 
 //Function to send the event to the webhook
-async function forwardEvent(url, payload, eventType) {
+async function forwardEvent(url, payload, eventType, metaCtx) {
   try {
+    // Chatwoot needs RAW body + signature header (if present)
+    if (url && url.includes('chatwoot')) {
+      const headers = {
+        'Content-Type': metaCtx?.contentType || 'application/json',
+      };
+
+      // Forward Meta signature if available
+      if (metaCtx?.sig) {
+        headers['X-Hub-Signature-256'] = metaCtx.sig;
+      }
+
+      await axios.post(url, metaCtx.raw, {
+        headers,
+        // Prevent axios from re-stringifying / mutating the raw JSON
+        transformRequest: [(data) => data],
+        timeout: 10000,
+        maxBodyLength: Infinity,
+      });
+
+      console.log(`[Chatwoot] Event ${eventType} forwarded to ${url}`);
+      return;
+    }
+    // Default behavior (n8n / Make / others): send parsed payload (value)
     await axios.post(url, payload);
     console.log(`Event ${eventType} forwarded to ${url}`);
   } catch (err) {
@@ -87,8 +110,9 @@ async function updateMessagesSent(phoneNumberId) {
 
 async function processEvent(event) {
   try {
-    const parsed = JSON.parse(event);
-    
+    // const parsed = JSON.parse(event);
+    const parsed = JSON.parse(envelope.raw);  // full Meta payload
+    const envelope = JSON.parse(event);       // { raw, sig, contentType, receivedAt }
     // Extract phone number ID from the first entry
     const entry = parsed.entry?.[0];
     const phoneNumberId = entry?.id;
@@ -124,7 +148,7 @@ async function processEvent(event) {
       
     for (const url of webhookUrls) {
       if (url[eventType]) {
-        await forwardEvent(url.webhook_url, value, eventType);
+        await forwardEvent(url.webhook_url, value, eventType, envelope);
       }
     }
   } catch (err) {
