@@ -82,7 +82,7 @@ async function updateMessagesSent(phoneNumberId) {
   );
 
   //Get subscription plan id
-  const subscriptionPlanId = subRows[0].subscription_plan_id;
+  let subscriptionPlanId = subRows[0].subscription_plan_id;
 
   //If admins set subscription plan 1
   if (user_id === 6 || user_id === 2) {
