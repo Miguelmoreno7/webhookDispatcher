@@ -101,7 +101,7 @@ async function updateMessagesSent(phoneNumberId) {
   } else {
     await pool.execute(
       `UPDATE wp_wa_configurations
-       SET messages_sent = messages_sent + 1,
+       SET messages_sent = messages_sent + 1
        WHERE waba_id = ?`,
       [phoneNumberId]
     );
