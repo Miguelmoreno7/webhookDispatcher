@@ -31,6 +31,18 @@ app.get('/webhook', (req, res) => {
   }
 });
 
+// Meta webhook verification
+app.get('/webhook/meta', (req, res) => {
+  const { 'hub.mode': mode, 'hub.challenge': challenge, 'hub.verify_token': token } = req.query;
+  
+  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    console.log('Webhook verified');
+    res.status(200).send(challenge);
+  } else {
+    res.sendStatus(403);
+  }
+});
+
 // Handle incoming webhook events
 app.post('/webhook', async (req, res) => {
   const body = req.body;
