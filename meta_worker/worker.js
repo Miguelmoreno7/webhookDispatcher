@@ -1,0 +1,145 @@
+const Redis = require('ioredis');
+const axios = require('axios');
+const mysql = require('mysql2/promise');
+
+const redis = new Redis(process.env.REDIS_URL);
+const pool = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+});
+
+const allowedEventTypes = new Set(['messages', 'feed', 'likes', 'posts', 'media']);
+
+async function forwardRawEvent(raw, webhookUrl) {
+  if (!webhookUrl) {
+    console.log('No webhook URL configured, skipping forward');
+    return;
+  }
+
+  try {
+    await axios.post(webhookUrl, raw, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      transformRequest: [(data) => data],
+      timeout: 10000,
+      maxBodyLength: Infinity,
+    });
+    console.log(`Forwarded meta event to ${webhookUrl}`);
+  } catch (err) {
+    console.error(`Failed to forward meta event to ${webhookUrl}:`, err.message);
+  }
+}
+
+function extractMessagingEvents(entry) {
+  if (Array.isArray(entry?.messaging)) {
+    return entry.messaging;
+  }
+
+  const changesMessages = entry?.changes?.[0]?.value?.messages;
+  if (Array.isArray(changesMessages)) {
+    return changesMessages;
+  }
+
+  return [];
+}
+
+function normalizeMessages(envelope) {
+  const parsed = envelope.parsed || JSON.parse(envelope.raw);
+  const entries = Array.isArray(parsed.entry) ? parsed.entry : [];
+  const normalized = [];
+
+  for (const entry of entries) {
+    const messagingEvents = extractMessagingEvents(entry);
+    if (!messagingEvents.length) {
+      continue;
+    }
+
+    for (const event of messagingEvents) {
+      const text = event?.message?.text || event?.text || null;
+      if (!text) {
+        continue;
+      }
+
+      normalized.push({
+        channel: envelope.subchannel,
+        account_id: envelope.account_id || entry?.id || null,
+        sender_id: event?.sender?.id || event?.from?.id || null,
+        text,
+        timestamp: event?.timestamp || event?.message?.timestamp || event?.time || null,
+        raw: event,
+      });
+    }
+  }
+
+  return normalized;
+}
+
+function getEventType(parsed) {
+  const entry = parsed.entry?.[0];
+  if (Array.isArray(entry?.messaging)) {
+    return 'messages';
+  }
+  return entry?.changes?.[0]?.field || null;
+}
+
+function isAllowedEventType(eventType) {
+  if (!eventType) {
+    return false;
+  }
+  return allowedEventTypes.has(eventType);
+}
+
+async function getWebhookUrl(pageId) {
+  if (!pageId) {
+    return null;
+  }
+  const [rows] = await pool.execute(
+    'SELECT webhook_url FROM wp_facebook_page WHERE page_id = ? LIMIT 1',
+    [pageId]
+  );
+  return rows?.[0]?.webhook_url || null;
+}
+
+async function processEvent(event) {
+  try {
+    const envelope = JSON.parse(event);
+    const parsed = envelope.parsed || JSON.parse(envelope.raw);
+    const eventType = getEventType(parsed);
+    if (!isAllowedEventType(eventType)) {
+      console.log(`Skipping meta event type: ${eventType}`);
+      return;
+    }
+
+    const accountId = envelope.account_id || parsed.entry?.[0]?.id || null;
+    const webhookUrl = await getWebhookUrl(accountId);
+    await forwardRawEvent(envelope.raw, webhookUrl);
+    const messages = normalizeMessages(envelope);
+
+    if (!messages.length) {
+      console.log('No message events to normalize');
+      return;
+    }
+
+    for (const message of messages) {
+      console.log('Normalized meta message:', JSON.stringify(message));
+    }
+  } catch (err) {
+    console.error('Error processing meta event:', err);
+  }
+}
+
+async function startWorker() {
+  console.log('Messenger worker started');
+
+  while (true) {
+    const result = await redis.brpop('events_messenger', 0);
+    if (result && result[1]) {
+      await processEvent(result[1]);
+    }
+  }
+}
+
+startWorker();
