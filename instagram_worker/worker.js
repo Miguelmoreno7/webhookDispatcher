@@ -97,7 +97,7 @@ async function getWebhookUrl(accountId) {
     return null;
   }
   const [rows] = await pool.execute(
-    'SELECT webhook_url FROM wp_instagram WHERE account_id = ? LIMIT 1',
+    'SELECT webhook_url FROM wp_instagram WHERE account_id = ?',
     [accountId]
   );
   return rows?.[0]?.webhook_url || null;
