@@ -12,21 +12,25 @@ const pool = mysql.createPool({
 
 const allowedEventTypes = new Set(['messages', 'feed', 'likes', 'posts', 'media', 'comments']);
 
-async function forwardRawEvent(raw, url) {
+async function forwardRawEvent(raw, webhookUrl) {
+    if (!webhookUrl) {
+    console.log('No webhook URL configured, skipping forward');
+    return;
+  }
 
-    try {
-      await axios.post(url.webhook_url, raw, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        transformRequest: [(data) => data],
-        timeout: 10000,
-        maxBodyLength: Infinity,
-      });
-      console.log(`Forwarded instagram event to ${url}`);
-    } catch (err) {
-      console.error(`Failed to forward instagram event to ${url}:`, err.message);
-    }
+  try {
+    await axios.post(webhookUrl, raw, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      transformRequest: [(data) => data],
+      timeout: 10000,
+      maxBodyLength: Infinity,
+    });
+    console.log(`Forwarded instagram event to ${webhookUrl}`);
+  } catch (err) {
+    console.error(`Failed to forward instagram event to ${webhookUrl}:`, err.message);
+  }
 }
 
 function extractMessagingEvents(entry) {
