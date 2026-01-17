@@ -12,8 +12,8 @@ const pool = mysql.createPool({
 
 const allowedEventTypes = new Set(['messages', 'feed', 'likes', 'posts', 'media', 'comments']);
 
-async function forwardRawEvent(raw, webhookUrl) {
-  for (const url of urls) {
+async function forwardRawEvent(raw, webhookUrls) {
+  for (const url of webhookUrls) {
     if (!url) continue;
 
     try {
