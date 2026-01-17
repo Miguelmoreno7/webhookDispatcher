@@ -99,7 +99,7 @@ async function getWebhookUrl(accountId) {
     'SELECT webhook_url FROM wp_instagram WHERE account_id = ?',
     [accountId]
   );
-  return rows?.[0]?.webhook_url || null;
+  return rows;
 }
 
 async function processEvent(event) {
