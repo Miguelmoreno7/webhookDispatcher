@@ -13,8 +13,7 @@ const pool = mysql.createPool({
 const allowedEventTypes = new Set(['messages', 'feed', 'likes', 'posts', 'media', 'comments']);
 
 async function forwardRawEvent(raw, url) {
-    if (!url) continue;
-  
+
     try {
       await axios.post(url.webhook_url, raw, {
         headers: {
