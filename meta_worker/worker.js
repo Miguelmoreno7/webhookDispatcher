@@ -97,7 +97,7 @@ async function getWebhookUrl(pageId) {
     return null;
   }
   const [rows] = await pool.execute(
-    'SELECT webhook_url FROM wp_facebook_page WHERE page_id = ? LIMIT 1',
+    'SELECT webhook_url FROM wp_facebook_webhooks WHERE page_id = ? LIMIT 1',
     [pageId]
   );
   return rows?.[0]?.webhook_url || null;
