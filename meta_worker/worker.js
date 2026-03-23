@@ -97,7 +97,7 @@ async function getWebhookUrl(pageId) {
     return null;
   }
   const [rows] = await pool.execute(
-    'SELECT webhook_url FROM wp_facebook_webhooks WHERE page_id = ?',
+    'SELECT webhook_url, message_received, message_sent, message_delivered, message_read FROM wp_facebook_webhooks WHERE page_id = ?',
     [pageId]
   );
   return rows;
@@ -113,10 +113,61 @@ async function processEvent(event) {
       return;
     }
 
+    const entry = parsed.entry?.[0];
+    const pageId = entry?.id; // en Messenger esto es el PAGE ID
+    const messagingEvent = entry?.messaging?.[0];
+    
+    if (!messagingEvent) {
+      console.log('No messaging event found');
+      return;
+    }
+    
+    let status = null;
+    
+    // IMPORTANTE: el orden importa
+    if (messagingEvent?.message?.is_echo) {
+      status = 'sent';
+    } else if (messagingEvent?.delivery) {
+      status = 'delivered';
+    } else if (messagingEvent?.read) {
+      status = 'read';
+    } else if (messagingEvent?.message) {
+      status = 'received';
+    } else {
+      console.log('Unknown Messenger event');
+      return;
+    }
+    
+    console.log(`Status: ${status}`);
+    
+    switch (status) {
+      case 'sent':
+        eventType = 'message_sent';
+        await updateMessagesSent(pageId);
+        break;
+    
+      case 'delivered':
+        eventType = 'message_delivered';
+        break;
+    
+      case 'read':
+        eventType = 'message_read';
+        break;
+    
+      case 'received':
+        eventType = 'message_received';
+        break;
+    
+      default:
+        console.log(`Unknown status: ${status}`);
+        return;
+    }
     const accountId = envelope.account_id || parsed.entry?.[0]?.id || null;
     const webhookUrls = await getWebhookUrl(accountId);
     for (const url of webhookUrls) {
-      await forwardRawEvent(envelope.raw, url.webhook_url);
+      if (url[eventType]) {
+        await forwardRawEvent(envelope.raw, url.webhook_url);
+      }
     }
     const messages = normalizeMessages(envelope);
 
