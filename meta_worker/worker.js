@@ -107,11 +107,11 @@ async function processEvent(event) {
   try {
     const envelope = JSON.parse(event);
     const parsed = envelope.parsed || JSON.parse(envelope.raw);
-    const eventType = getEventType(parsed);
-    if (!isAllowedEventType(eventType)) {
-      console.log(`Skipping meta event type: ${eventType}`);
-      return;
-    }
+    //const eventType = getEventType(parsed);
+    //if (!isAllowedEventType(eventType)) {
+      //console.log(`Skipping meta event type: ${eventType}`);
+      //return;
+    //}
 
     const entry = parsed.entry?.[0];
     const pageId = entry?.id; // en Messenger esto es el PAGE ID
@@ -123,6 +123,7 @@ async function processEvent(event) {
     }
     
     let status = null;
+    let eventType = null;
     
     // IMPORTANTE: el orden importa
     if (messagingEvent?.message?.is_echo) {
