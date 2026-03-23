@@ -97,10 +97,10 @@ async function getWebhookUrl(pageId) {
     return null;
   }
   const [rows] = await pool.execute(
-    'SELECT webhook_url FROM wp_facebook_webhooks WHERE page_id = ? LIMIT 1',
+    'SELECT webhook_url FROM wp_facebook_webhooks WHERE page_id = ?',
     [pageId]
   );
-  return rows?.[0]?.webhook_url || null;
+  return rows;
 }
 
 async function processEvent(event) {
@@ -114,8 +114,10 @@ async function processEvent(event) {
     }
 
     const accountId = envelope.account_id || parsed.entry?.[0]?.id || null;
-    const webhookUrl = await getWebhookUrl(accountId);
-    await forwardRawEvent(envelope.raw, webhookUrl);
+    const webhookUrls = await getWebhookUrl(accountId);
+    for (const url of webhookUrls) {
+      await forwardRawEvent(envelope.raw, url.webhook_url);
+    }
     const messages = normalizeMessages(envelope);
 
     if (!messages.length) {
