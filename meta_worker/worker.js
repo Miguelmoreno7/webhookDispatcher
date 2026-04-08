@@ -123,25 +123,79 @@ async function getWebhookUrl(pageId) {
     return null;
   }
   const [rows] = await pool.execute(
-    'SELECT webhook_url FROM wp_facebook_page WHERE page_id = ? LIMIT 1',
+    'SELECT webhook_url, message_received, message_sent, message_delivered, message_read FROM wp_facebook_webhooks WHERE page_id = ?',
     [pageId]
   );
-  return rows?.[0]?.webhook_url || null;
+  return rows;
 }
 
 async function processEvent(event) {
   try {
     const envelope = JSON.parse(event);
     const parsed = envelope.parsed || JSON.parse(envelope.raw);
-    const eventType = getEventType(parsed);
-    if (!isAllowedEventType(eventType)) {
-      console.log(`Skipping meta event type: ${eventType}`);
+    //const eventType = getEventType(parsed);
+    //if (!isAllowedEventType(eventType)) {
+      //console.log(`Skipping meta event type: ${eventType}`);
+      //return;
+    //}
+
+    const entry = parsed.entry?.[0];
+    const pageId = entry?.id; // en Messenger esto es el PAGE ID
+    const messagingEvent = entry?.messaging?.[0];
+    
+    if (!messagingEvent) {
+      console.log('No messaging event found');
       return;
     }
-
+    
+    let status = null;
+    let eventType = null;
+    
+    // IMPORTANTE: el orden importa
+    if (messagingEvent?.message?.is_echo) {
+      status = 'sent';
+    } else if (messagingEvent?.delivery) {
+      status = 'delivered';
+    } else if (messagingEvent?.read) {
+      status = 'read';
+    } else if (messagingEvent?.message) {
+      status = 'received';
+    } else {
+      console.log('Unknown Messenger event');
+      return;
+    }
+    
+    console.log(`Status: ${status}`);
+    
+    switch (status) {
+      case 'sent':
+        eventType = 'message_sent';
+        await updateMessagesSent(pageId);
+        break;
+    
+      case 'delivered':
+        eventType = 'message_delivered';
+        break;
+    
+      case 'read':
+        eventType = 'message_read';
+        break;
+    
+      case 'received':
+        eventType = 'message_received';
+        break;
+    
+      default:
+        console.log(`Unknown status: ${status}`);
+        return;
+    }
     const accountId = envelope.account_id || parsed.entry?.[0]?.id || null;
-    const webhookUrl = await getWebhookUrl(accountId);
-    await forwardRawEvent(envelope.raw, webhookUrl);
+    const webhookUrls = await getWebhookUrl(accountId);
+    for (const url of webhookUrls) {
+      if (url[eventType]) {
+        await forwardRawEvent(envelope.raw, url.webhook_url);
+      }
+    }
     const messages = normalizeMessages(envelope);
 
     if (!messages.length) {
