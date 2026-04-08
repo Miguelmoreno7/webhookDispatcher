@@ -77,6 +77,32 @@ function normalizeMessages(envelope) {
   return normalized;
 }
 
+function normalizeFeedEvents(envelope) {
+  const parsed = envelope.parsed || JSON.parse(envelope.raw);
+  const entries = Array.isArray(parsed.entry) ? parsed.entry : [];
+  const normalized = [];
+
+  for (const entry of entries) {
+    const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+    for (const change of changes) {
+      if (change?.field !== 'feed') {
+        continue;
+      }
+
+      normalized.push({
+        channel: envelope.subchannel,
+        account_id: envelope.account_id || entry?.id || null,
+        sender_id: change?.value?.from?.id || null,
+        text: change?.value?.message || null,
+        timestamp: change?.value?.created_time || entry?.time || null,
+        raw: change,
+      });
+    }
+  }
+
+  return normalized;
+}
+
 function getEventType(parsed) {
   const entry = parsed.entry?.[0];
   if (Array.isArray(entry?.messaging)) {
@@ -173,7 +199,15 @@ async function processEvent(event) {
     const messages = normalizeMessages(envelope);
 
     if (!messages.length) {
-      console.log('No message events to normalize');
+      const feedEvents = normalizeFeedEvents(envelope);
+      if (!feedEvents.length) {
+        console.log('No messaging event found');
+        return;
+      }
+
+      for (const feedEvent of feedEvents) {
+        console.log('Normalized meta feed event:', JSON.stringify(feedEvent));
+      }
       return;
     }
 
