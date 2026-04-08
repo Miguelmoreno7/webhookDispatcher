@@ -91,6 +91,33 @@ app.post('/webhook', handleWebhook);
 // Handle incoming Meta webhook events (Messenger/Instagram)
 app.post('/webhook/meta', handleWebhook);
 
+// Handle incoming Meta webhook events (Messenger/Instagram)
+app.post('/webhook/meta', async (req, res) => {
+  const body = req.body;
+
+  if (body.object) {
+    const entry = body.entry?.[0];
+    const accountId = entry?.id || null;
+    const subchannel = body.object === 'instagram' ? 'instagram' : 'messenger';
+
+    const envelope = {
+      channel: 'meta',
+      subchannel,
+      account_id: accountId,
+      received_at: new Date().toISOString(),
+      raw: req.rawBody?.toString('utf8') ?? JSON.stringify(body),
+      parsed: body,
+    };
+
+    const queueName = subchannel === 'instagram' ? 'events_instagram' : 'events_messenger';
+    await redis.lpush(queueName, JSON.stringify(envelope));
+    console.log(`Meta event (${subchannel}) received and pushed to Redis (${queueName})`);
+    res.sendStatus(200);
+  } else {
+    res.sendStatus(404);
+  }
+});
+
 app.listen(3000, () => {
   console.log('Dispatcher running on port 3000');
 });
