@@ -123,7 +123,7 @@ async function getWebhookUrl(pageId) {
     return null;
   }
   const [rows] = await pool.execute(
-    'SELECT webhook_url, message_received, message_sent, message_delivered, message_read FROM wp_facebook_webhooks WHERE page_id = ?',
+    'SELECT webhook_url, message_received, message_sent, message_delivered, message_read, feed FROM wp_facebook_webhooks WHERE page_id = ?',
     [pageId]
   );
   return rows;
@@ -144,7 +144,23 @@ async function processEvent(event) {
     const messagingEvent = entry?.messaging?.[0];
     
     if (!messagingEvent) {
-      console.log('No messaging event found');
+      const feedEvents = normalizeFeedEvents(envelope);
+      if (!feedEvents.length) {
+        console.log('No messaging or feed event found');
+        return;
+      }
+
+      const accountId = envelope.account_id || parsed.entry?.[0]?.id || null;
+      const webhookUrls = await getWebhookUrl(accountId);
+      for (const url of webhookUrls || []) {
+        if (url.feed) {
+          await forwardRawEvent(envelope.raw, url.webhook_url);
+        }
+      }
+
+      for (const feedEvent of feedEvents) {
+        console.log('Normalized meta feed event:', JSON.stringify(feedEvent));
+      }
       return;
     }
     
