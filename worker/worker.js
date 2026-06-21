@@ -3,6 +3,10 @@ const axios = require('axios');
 const mysql = require('mysql2/promise');
 
 const redis = new Redis(process.env.REDIS_URL);
+const WORKER_HEALTH_INTERVAL_MS = Number(process.env.WORKER_HEALTH_INTERVAL_MS || 60000);
+
+redis.on('connect', () => console.log('[WhatsApp Worker] Redis connected'));
+redis.on('error', (err) => console.error('[WhatsApp Worker] Redis error:', err.message));
 
 //Connect to the database
 const pool = mysql.createPool({
@@ -38,7 +42,10 @@ async function forwardEvent(url, payload, eventType, metaCtx) {
       return;
     }
     // Default behavior (n8n / Make / others): send parsed payload (value)
-    await axios.post(url, payload);
+    await axios.post(url, payload, {
+      timeout: 10000,
+      maxBodyLength: Infinity,
+    });
     console.log(`Event ${eventType} forwarded to ${url}`);
   } catch (err) {
     console.error(`Failed to send ${eventType} to ${url}:`, err.message);
@@ -110,6 +117,7 @@ async function updateMessagesSent(phoneNumberId) {
 
 async function processEvent(event) {
   try {
+    console.log('[WhatsApp Worker] Processing event from Redis');
     // const parsed = JSON.parse(event);
     const envelope = JSON.parse(event);       // { raw, sig, contentType, receivedAt }
     const parsed = JSON.parse(envelope.raw);  // full Meta payload
@@ -118,6 +126,8 @@ async function processEvent(event) {
     const phoneNumberId = entry?.id;
     const fieldType = entry?.changes?.[0]?.field;
     const value = entry?.changes?.[0]?.value;
+
+    console.log(`[WhatsApp Worker] Parsed event field=${fieldType || 'unknown'} phone=${phoneNumberId || 'unknown'}`);
 
     let eventType = null;
     
@@ -145,6 +155,7 @@ async function processEvent(event) {
     }
 
     const webhookUrls = await getWebhooksForPhone(phoneNumberId);
+    console.log(`[WhatsApp Worker] Found ${webhookUrls.length} webhook row(s) for ${phoneNumberId}`);
       
     for (const url of webhookUrls) {
       if (url[eventType]) {
@@ -156,15 +167,24 @@ async function processEvent(event) {
   }
 }
 
+async function logWorkerHealth() {
+  try {
+    const queueLength = await redis.llen('events');
+    console.log(`[WhatsApp Worker] Health OK - events queue length: ${queueLength}`);
+  } catch (err) {
+    console.error('[WhatsApp Worker] Health check failed:', err.message);
+  }
+}
+
 async function startWorker() {
-  console.log('Worker started');
+  console.log('[WhatsApp Worker] Worker started');
+  setInterval(logWorkerHealth, WORKER_HEALTH_INTERVAL_MS);
 
   while (true) {
-    const event = await redis.rpop('events');
-    if (event) {
-      await processEvent(event);
-    } else {
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retrying
+    const result = await redis.brpop('events', 0);
+    if (result && result[1]) {
+      console.log('[WhatsApp Worker] Event popped from Redis queue');
+      await processEvent(result[1]);
     }
   }
 }

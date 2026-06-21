@@ -1,13 +1,14 @@
 version: '3.8'
 
 services:
-  dispatcher:
+  ingress:
     build: ./dispatcher
     container_name: webhook_dispatcher
     ports:
       - 3000
     environment:
       VERIFY_TOKEN: ${VERIFY_TOKEN}
+      META_VERIFY_TOKEN: ${META_VERIFY_TOKEN}
       REDIS_URL: redis://:RealUnited93@redis:6379
     depends_on:
       - redis
@@ -21,9 +22,39 @@ services:
       - traefik.http.routers.dispatcher.tls.certResolver=letsencrypt
       - traefik.http.services.dispatcher.loadbalancer.server.port=3000
 
-  worker:
+  worker_whatsapp:
     build: ./worker
     container_name: webhook_worker
+    environment:
+      REDIS_URL: redis://:RealUnited93@redis:6379
+      DB_HOST: ${DB_HOST}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+    depends_on:
+      - redis
+    restart: always
+    networks:
+      - dokploy-network
+
+  worker_meta:
+    build: ./meta_worker
+    container_name: webhook_meta_worker
+    environment:
+      REDIS_URL: redis://:RealUnited93@redis:6379
+      DB_HOST: ${DB_HOST}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+    depends_on:
+      - redis
+    restart: always
+    networks:
+      - dokploy-network
+
+  worker_instagram:
+    build: ./instagram_worker
+    container_name: webhook_instagram_worker
     environment:
       REDIS_URL: redis://:RealUnited93@redis:6379
       DB_HOST: ${DB_HOST}
