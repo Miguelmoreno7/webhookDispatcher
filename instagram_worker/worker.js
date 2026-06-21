@@ -10,10 +10,10 @@ const pool = mysql.createPool({
   database: process.env.DB_NAME,
 });
 
-const allowedEventTypes = new Set(['messages', 'feed', 'likes', 'posts', 'media', 'comments']);
+const allowedEventTypes = new Set(['messages', 'feed', 'likes', 'posts', 'media']);
 
 async function forwardRawEvent(raw, webhookUrl) {
-    if (!webhookUrl) {
+  if (!webhookUrl) {
     console.log('No webhook URL configured, skipping forward');
     return;
   }
@@ -97,10 +97,10 @@ async function getWebhookUrl(accountId) {
     return null;
   }
   const [rows] = await pool.execute(
-    'SELECT webhook_url FROM wp_instagram WHERE account_id = ?',
+    'SELECT webhook_url FROM wp_instagram WHERE account_id = ? LIMIT 1',
     [accountId]
   );
-  return rows;
+  return rows?.[0]?.webhook_url || null;
 }
 
 async function processEvent(event) {
@@ -115,9 +115,7 @@ async function processEvent(event) {
 
     const accountId = envelope.account_id || parsed.entry?.[0]?.id || null;
     const webhookUrl = await getWebhookUrl(accountId);
-    for (const url of webhookUrl) {
-      await forwardRawEvent(envelope.raw, url.webhook_url);
-    }
+    await forwardRawEvent(envelope.raw, webhookUrl);
     const messages = normalizeMessages(envelope);
 
     if (!messages.length) {
