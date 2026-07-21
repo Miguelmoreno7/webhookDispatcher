@@ -10,6 +10,7 @@ Dispatcher/worker para WhatsApp y Meta (Messenger/Instagram) usando Express + Re
   * `META_VERIFY_TOKEN` (verificación Meta)
   * `REDIS_URL` (por ejemplo `redis://:RealUnited93@redis:6379`)
   * `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` (solo para workers de WhatsApp)
+  * `CRM_WEBHOOK_URL`, `CRM_WEBHOOK_SECRET`, `CRM_WEBHOOK_TIMEOUT_MS` (puente opcional y fail-open hacia MovIA CRM)
 
 ## Levantar servicios
 

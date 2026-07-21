@@ -1,6 +1,7 @@
 const Redis = require('ioredis');
 const axios = require('axios');
 const mysql = require('mysql2/promise');
+const { forwardToCrm } = require('./crm-forwarder');
 
 const redis = new Redis(process.env.REDIS_URL);
 const pool = mysql.createPool({
@@ -212,6 +213,16 @@ async function processEvent(event) {
         await forwardRawEvent(envelope.raw, url.webhook_url);
       }
     }
+    await forwardToCrm({
+      eventType: eventType === 'message_received' ? 'MESSAGE_RECEIVED' :
+        eventType === 'message_sent' ? 'MESSAGE_SENT' :
+        eventType === 'message_delivered' ? 'MESSAGE_DELIVERED' :
+        eventType === 'message_read' ? 'MESSAGE_READ' : 'UNKNOWN',
+      resourceId: accountId,
+      payload: parsed,
+      raw: envelope.raw,
+      receivedAt: envelope.receivedAt,
+    });
     const messages = normalizeMessages(envelope);
 
     if (!messages.length) {

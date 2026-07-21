@@ -31,6 +31,9 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
+      CRM_WEBHOOK_URL: ${CRM_WEBHOOK_URL:-}
+      CRM_WEBHOOK_SECRET: ${CRM_WEBHOOK_SECRET:-}
+      CRM_WEBHOOK_TIMEOUT_MS: ${CRM_WEBHOOK_TIMEOUT_MS:-3000}
     depends_on:
       - redis
     restart: always
@@ -46,6 +49,9 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
+      CRM_WEBHOOK_URL: ${CRM_WEBHOOK_URL:-}
+      CRM_WEBHOOK_SECRET: ${CRM_WEBHOOK_SECRET:-}
+      CRM_WEBHOOK_TIMEOUT_MS: ${CRM_WEBHOOK_TIMEOUT_MS:-3000}
     depends_on:
       - redis
     restart: always
@@ -61,6 +67,9 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
+      CRM_WEBHOOK_URL: ${CRM_WEBHOOK_URL:-}
+      CRM_WEBHOOK_SECRET: ${CRM_WEBHOOK_SECRET:-}
+      CRM_WEBHOOK_TIMEOUT_MS: ${CRM_WEBHOOK_TIMEOUT_MS:-3000}
     depends_on:
       - redis
     restart: always
