@@ -1,20 +1,22 @@
 const crypto = require('crypto');
 const axios = require('axios');
+const { createSignedDelivery } = require('./webhook-signature');
 
-async function forwardToCrm({ eventType, resourceId, payload, raw, receivedAt }) {
+async function forwardToCrm({ eventType, resourceId, payload, raw, receivedAt, signingSecret }) {
   const url = process.env.CRM_WEBHOOK_URL;
-  const secret = process.env.CRM_WEBHOOK_SECRET;
-  if (!url || !secret || !resourceId) return;
+  if (!url || !signingSecret || !resourceId) return;
   try {
-    await axios.post(url, {
+    const id = `instagram:${crypto.createHash('sha256').update(raw).digest('hex')}`;
+    const delivery = createSignedDelivery({
       schemaVersion: 1,
-      deliveryId: `instagram:${crypto.createHash('sha256').update(raw).digest('hex')}`,
+      deliveryId: id,
       channel: 'INSTAGRAM',
       eventType,
       resourceId: String(resourceId),
       receivedAt: receivedAt || new Date().toISOString(),
       payload,
-    }, { headers: { 'Content-Type': 'application/json', 'x-movia-dispatcher-secret': secret, 'x-movia-dispatcher-schema': '1' }, timeout: Number(process.env.CRM_WEBHOOK_TIMEOUT_MS || 3000), maxBodyLength: Infinity });
+    }, signingSecret, { deliveryId: id });
+    await axios.post(url, delivery.body, { headers: { ...delivery.headers, 'x-movia-dispatcher-schema': '1' }, transformRequest: [(data) => data], timeout: Number(process.env.CRM_WEBHOOK_TIMEOUT_MS || 3000), maxBodyLength: Infinity });
   } catch (error) {
     console.error(`[CRM bridge] Instagram delivery failed: ${error.message}`);
   }

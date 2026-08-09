@@ -2,6 +2,7 @@ const Redis = require('ioredis');
 const axios = require('axios');
 const mysql = require('mysql2/promise');
 const { forwardToCrm } = require('./crm-forwarder');
+const { createSignedDelivery, ensureSigningSecret, isChatwootUrl } = require('./webhook-signature');
 
 const redis = new Redis(process.env.REDIS_URL);
 const pool = mysql.createPool({
@@ -13,16 +14,19 @@ const pool = mysql.createPool({
 
 const allowedEventTypes = new Set(['messages', 'feed', 'likes', 'posts', 'media']);
 
-async function forwardRawEvent(raw, webhookUrl) {
+async function forwardRawEvent(raw, webhookUrl, signingSecret) {
   if (!webhookUrl) {
     console.log('No webhook URL configured, skipping forward');
     return;
   }
 
   try {
-    await axios.post(webhookUrl, raw, {
+    const delivery = isChatwootUrl(webhookUrl)
+      ? { body: Buffer.from(raw, 'utf8'), headers: { 'Content-Type': 'application/json' } }
+      : createSignedDelivery(raw, signingSecret);
+    await axios.post(webhookUrl, delivery.body, {
       headers: {
-        'Content-Type': 'application/json',
+        ...delivery.headers,
       },
       transformRequest: [(data) => data],
       timeout: 10000,
@@ -124,7 +128,7 @@ async function getWebhookUrl(pageId) {
     return null;
   }
   const [rows] = await pool.execute(
-    'SELECT webhook_url, message_received, message_sent, message_delivered, message_read, feed FROM wp_facebook_webhooks WHERE page_id = ?',
+    'SELECT webhook_url, message_received, message_sent, message_delivered, message_read, feed, secret_signature FROM wp_facebook_webhooks WHERE page_id = ?',
     [pageId]
   );
   return rows;
@@ -155,7 +159,18 @@ async function processEvent(event) {
       const webhookUrls = await getWebhookUrl(accountId);
       for (const url of webhookUrls || []) {
         if (url.feed) {
-          await forwardRawEvent(envelope.raw, url.webhook_url);
+          if (isChatwootUrl(url.webhook_url)) {
+            await forwardRawEvent(envelope.raw, url.webhook_url, null);
+            continue;
+          }
+          const signingSecret = await ensureSigningSecret(pool, {
+            table: 'wp_facebook_webhooks',
+            ownerColumn: 'page_id',
+            ownerId: accountId,
+            webhookUrl: url.webhook_url,
+            currentSecret: url.secret_signature,
+          });
+          await forwardRawEvent(envelope.raw, url.webhook_url, signingSecret);
         }
       }
 
@@ -208,21 +223,40 @@ async function processEvent(event) {
     }
     const accountId = envelope.account_id || parsed.entry?.[0]?.id || null;
     const webhookUrls = await getWebhookUrl(accountId);
+    let crmSigningSecret = null;
     for (const url of webhookUrls) {
       if (url[eventType]) {
-        await forwardRawEvent(envelope.raw, url.webhook_url);
+        if (isChatwootUrl(url.webhook_url)) {
+          await forwardRawEvent(envelope.raw, url.webhook_url, null);
+          continue;
+        }
+        const signingSecret = await ensureSigningSecret(pool, {
+          table: 'wp_facebook_webhooks',
+          ownerColumn: 'page_id',
+          ownerId: accountId,
+          webhookUrl: url.webhook_url,
+          currentSecret: url.secret_signature,
+        });
+        if (url.webhook_url === process.env.CRM_WEBHOOK_URL) {
+          crmSigningSecret = signingSecret;
+          continue;
+        }
+        await forwardRawEvent(envelope.raw, url.webhook_url, signingSecret);
       }
     }
-    await forwardToCrm({
-      eventType: eventType === 'message_received' ? 'MESSAGE_RECEIVED' :
-        eventType === 'message_sent' ? 'MESSAGE_SENT' :
-        eventType === 'message_delivered' ? 'MESSAGE_DELIVERED' :
-        eventType === 'message_read' ? 'MESSAGE_READ' : 'UNKNOWN',
-      resourceId: accountId,
-      payload: parsed,
-      raw: envelope.raw,
-      receivedAt: envelope.receivedAt,
-    });
+    if (crmSigningSecret) {
+      await forwardToCrm({
+        eventType: eventType === 'message_received' ? 'MESSAGE_RECEIVED' :
+          eventType === 'message_sent' ? 'MESSAGE_SENT' :
+          eventType === 'message_delivered' ? 'MESSAGE_DELIVERED' :
+          eventType === 'message_read' ? 'MESSAGE_READ' : 'UNKNOWN',
+        resourceId: accountId,
+        payload: parsed,
+        raw: envelope.raw,
+        receivedAt: envelope.receivedAt,
+        signingSecret: crmSigningSecret,
+      });
+    }
     const messages = normalizeMessages(envelope);
 
     if (!messages.length) {

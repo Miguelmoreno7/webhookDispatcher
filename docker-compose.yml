@@ -9,6 +9,7 @@ services:
     environment:
       VERIFY_TOKEN: ${VERIFY_TOKEN}
       META_VERIFY_TOKEN: ${META_VERIFY_TOKEN}
+      META_APP_SECRET: ${META_APP_SECRET}
       REDIS_URL: redis://:RealUnited93@redis:6379
     depends_on:
       - redis
@@ -32,7 +33,6 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
       CRM_WEBHOOK_URL: ${CRM_WEBHOOK_URL:-}
-      CRM_WEBHOOK_SECRET: ${CRM_WEBHOOK_SECRET:-}
       CRM_WEBHOOK_TIMEOUT_MS: ${CRM_WEBHOOK_TIMEOUT_MS:-3000}
     depends_on:
       - redis
@@ -50,7 +50,6 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
       CRM_WEBHOOK_URL: ${CRM_WEBHOOK_URL:-}
-      CRM_WEBHOOK_SECRET: ${CRM_WEBHOOK_SECRET:-}
       CRM_WEBHOOK_TIMEOUT_MS: ${CRM_WEBHOOK_TIMEOUT_MS:-3000}
     depends_on:
       - redis
@@ -68,7 +67,6 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
       CRM_WEBHOOK_URL: ${CRM_WEBHOOK_URL:-}
-      CRM_WEBHOOK_SECRET: ${CRM_WEBHOOK_SECRET:-}
       CRM_WEBHOOK_TIMEOUT_MS: ${CRM_WEBHOOK_TIMEOUT_MS:-3000}
     depends_on:
       - redis

@@ -2,6 +2,7 @@ const Redis = require('ioredis');
 const axios = require('axios');
 const mysql = require('mysql2/promise');
 const { forwardToCrm } = require('./crm-forwarder');
+const { createSignedDelivery, ensureSigningSecret, isChatwootUrl } = require('./webhook-signature');
 
 const redis = new Redis(process.env.REDIS_URL);
 const pool = mysql.createPool({
@@ -13,16 +14,19 @@ const pool = mysql.createPool({
 
 const allowedEventTypes = new Set(['messages', 'feed', 'likes', 'posts', 'media', 'comments']);
 
-async function forwardRawEvent(raw, webhookUrl) {
+async function forwardRawEvent(raw, webhookUrl, signingSecret) {
     if (!webhookUrl) {
     console.log('No webhook URL configured, skipping forward');
     return;
   }
 
   try {
-    await axios.post(webhookUrl, raw, {
+    const delivery = isChatwootUrl(webhookUrl)
+      ? { body: Buffer.from(raw, 'utf8'), headers: { 'Content-Type': 'application/json' } }
+      : createSignedDelivery(raw, signingSecret);
+    await axios.post(webhookUrl, delivery.body, {
       headers: {
-        'Content-Type': 'application/json',
+        ...delivery.headers,
       },
       transformRequest: [(data) => data],
       timeout: 10000,
@@ -98,7 +102,7 @@ async function getWebhookUrl(accountId) {
     return null;
   }
   const [rows] = await pool.execute(
-    'SELECT webhook_url FROM wp_instagram WHERE account_id = ?',
+    'SELECT webhook_url, secret_signature FROM wp_instagram WHERE account_id = ?',
     [accountId]
   );
   return rows;
@@ -121,16 +125,35 @@ async function processEvent(event) {
       messagingEvent?.read ? 'MESSAGE_READ' :
       messagingEvent?.message ? 'MESSAGE_RECEIVED' : 'UNKNOWN';
     const webhookUrl = await getWebhookUrl(accountId);
+    let crmSigningSecret = null;
     for (const url of webhookUrl) {
-      await forwardRawEvent(envelope.raw, url.webhook_url);
+      if (isChatwootUrl(url.webhook_url)) {
+        await forwardRawEvent(envelope.raw, url.webhook_url, null);
+        continue;
+      }
+      const signingSecret = await ensureSigningSecret(pool, {
+        table: 'wp_instagram',
+        ownerColumn: 'account_id',
+        ownerId: accountId,
+        webhookUrl: url.webhook_url,
+        currentSecret: url.secret_signature,
+      });
+      if (url.webhook_url === process.env.CRM_WEBHOOK_URL) {
+        crmSigningSecret = signingSecret;
+        continue;
+      }
+      await forwardRawEvent(envelope.raw, url.webhook_url, signingSecret);
     }
-    await forwardToCrm({
-      eventType: crmEventType,
-      resourceId: accountId,
-      payload: parsed,
-      raw: envelope.raw,
-      receivedAt: envelope.receivedAt,
-    });
+    if (crmSigningSecret) {
+      await forwardToCrm({
+        eventType: crmEventType,
+        resourceId: accountId,
+        payload: parsed,
+        raw: envelope.raw,
+        receivedAt: envelope.receivedAt,
+        signingSecret: crmSigningSecret,
+      });
+    }
     const messages = normalizeMessages(envelope);
 
     if (!messages.length) {

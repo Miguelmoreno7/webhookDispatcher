@@ -2,6 +2,7 @@ const Redis = require('ioredis');
 const axios = require('axios');
 const mysql = require('mysql2/promise');
 const { forwardToCrm } = require('./crm-forwarder');
+const { createSignedDelivery, ensureSigningSecret, isChatwootUrl } = require('./webhook-signature');
 
 const redis = new Redis(process.env.REDIS_URL);
 
@@ -14,10 +15,10 @@ const pool = mysql.createPool({
 });
 
 //Function to send the event to the webhook
-async function forwardEvent(url, payload, eventType, metaCtx) {
+async function forwardEvent(url, payload, eventType, metaCtx, signingSecret) {
   try {
     // Chatwoot needs RAW body + signature header (if present)
-    if (url && url.includes('chat.moviatech.com')) {
+    if (isChatwootUrl(url)) {
       const headers = {
         'Content-Type': metaCtx?.contentType || 'application/json',
       };
@@ -39,7 +40,13 @@ async function forwardEvent(url, payload, eventType, metaCtx) {
       return;
     }
     // Default behavior (n8n / Make / others): send parsed payload (value)
-    await axios.post(url, payload);
+    const delivery = createSignedDelivery(payload, signingSecret);
+    await axios.post(url, delivery.body, {
+      headers: delivery.headers,
+      transformRequest: [(data) => data],
+      timeout: 10000,
+      maxBodyLength: Infinity,
+    });
     console.log(`Event ${eventType} forwarded to ${url}`);
   } catch (err) {
     console.error(`Failed to send ${eventType} to ${url}:`, err.message);
@@ -60,7 +67,7 @@ async function getWebhooksForPhone(phoneNumberId) {
   }
 
   const [rows] = await pool.execute(
-    'SELECT webhook_url, message_received, message_sent, message_delivered, message_read FROM wp_wa_webhooks WHERE waba_id = ?',
+    'SELECT webhook_url, message_received, message_sent, message_delivered, message_read, secret_signature FROM wp_wa_webhooks WHERE waba_id = ?',
     [phoneNumberId]
   );
   return rows;
@@ -147,22 +154,42 @@ async function processEvent(event) {
 
     const webhookUrls = await getWebhooksForPhone(phoneNumberId);
       
+    let crmSigningSecret = null;
     for (const url of webhookUrls) {
       if (url[eventType]) {
-        await forwardEvent(url.webhook_url, value, eventType, envelope);
+        if (isChatwootUrl(url.webhook_url)) {
+          await forwardEvent(url.webhook_url, value, eventType, envelope, null);
+          continue;
+        }
+
+        const signingSecret = await ensureSigningSecret(pool, {
+          table: 'wp_wa_webhooks',
+          ownerColumn: 'waba_id',
+          ownerId: phoneNumberId,
+          webhookUrl: url.webhook_url,
+          currentSecret: url.secret_signature,
+        });
+        if (url.webhook_url === process.env.CRM_WEBHOOK_URL) {
+          crmSigningSecret = signingSecret;
+          continue;
+        }
+        await forwardEvent(url.webhook_url, value, eventType, envelope, signingSecret);
       }
     }
-    await forwardToCrm({
-      channel: 'WHATSAPP',
-      eventType: eventType === 'message_received' ? 'MESSAGE_RECEIVED' :
-        eventType === 'message_sent' ? 'MESSAGE_SENT' :
-        eventType === 'message_delivered' ? 'MESSAGE_DELIVERED' :
-        eventType === 'message_read' ? 'MESSAGE_READ' : 'UNKNOWN',
-      resourceId: value?.metadata?.phone_number_id,
-      payload: value,
-      raw: envelope.raw,
-      receivedAt: envelope.receivedAt,
-    });
+    if (crmSigningSecret) {
+      await forwardToCrm({
+        channel: 'WHATSAPP',
+        eventType: eventType === 'message_received' ? 'MESSAGE_RECEIVED' :
+          eventType === 'message_sent' ? 'MESSAGE_SENT' :
+          eventType === 'message_delivered' ? 'MESSAGE_DELIVERED' :
+          eventType === 'message_read' ? 'MESSAGE_READ' : 'UNKNOWN',
+        resourceId: value?.metadata?.phone_number_id,
+        payload: value,
+        raw: envelope.raw,
+        receivedAt: envelope.receivedAt,
+        signingSecret: crmSigningSecret,
+      });
+    }
   } catch (err) {
     console.error('Error processing event:', err);
   }

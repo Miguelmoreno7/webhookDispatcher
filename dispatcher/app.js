@@ -1,8 +1,8 @@
 // Import Express.js
 const express = require('express');
 
-const bodyParser = require('body-parser');
 const Redis = require('ioredis');
+const { createMetaSignatureMiddleware } = require('./meta-signature');
 
 // Create an Express app
 const app = express();
@@ -17,6 +17,8 @@ app.use(express.json({
 }));
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+const META_VERIFY_TOKEN = process.env.META_VERIFY_TOKEN;
+const requireMetaSignature = createMetaSignatureMiddleware(process.env.META_APP_SECRET);
 const redis = new Redis(process.env.REDIS_URL);
 
 // Meta webhook verification
@@ -35,7 +37,7 @@ app.get('/webhook', (req, res) => {
 app.get('/webhook/meta', (req, res) => {
   const { 'hub.mode': mode, 'hub.challenge': challenge, 'hub.verify_token': token } = req.query;
   
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+  if (mode === 'subscribe' && token === META_VERIFY_TOKEN) {
     console.log('Webhook verified');
     res.status(200).send(challenge);
   } else {
@@ -44,7 +46,7 @@ app.get('/webhook/meta', (req, res) => {
 });
 
 // Handle incoming webhook events
-app.post('/webhook', async (req, res) => {
+app.post('/webhook', requireMetaSignature, async (req, res) => {
   const body = req.body;
   
 if (body.object) {
@@ -76,7 +78,7 @@ if (body.object) {
 });
 
 // Handle incoming Meta webhook events (Messenger/Instagram)
-app.post('/webhook/meta', async (req, res) => {
+app.post('/webhook/meta', requireMetaSignature, async (req, res) => {
   const body = req.body;
 
   if (body.object) {
@@ -88,7 +90,7 @@ app.post('/webhook/meta', async (req, res) => {
       channel: 'meta',
       subchannel,
       account_id: accountId,
-      received_at: new Date().toISOString(),
+      receivedAt: new Date().toISOString(),
       raw: req.rawBody?.toString('utf8') ?? JSON.stringify(body),
       parsed: body,
     };
@@ -105,4 +107,3 @@ app.post('/webhook/meta', async (req, res) => {
 app.listen(3000, () => {
   console.log('Dispatcher running on port 3000');
 });
-
