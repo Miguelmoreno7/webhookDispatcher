@@ -17,7 +17,7 @@ Dispatcher/worker para WhatsApp y Meta (Messenger/Instagram) usando Express + Re
 
 Todos los `POST` de Meta se validan con `META_APP_SECRET` antes de entrar a Redis. Una firma ausente o inválida responde `401`; si el secreto no está configurado, el dispatcher falla cerrado con `500`.
 
-Los webhooks salientes conservan su payload actual y se firman con el valor `secret_signature` de su fila. Si el valor está vacío, el worker crea un secreto aleatorio de 32 bytes (64 caracteres hexadecimales) de forma atómica. Chatwoot (`chat.moviatech.com`) conserva el flujo existente de body y firma originales de Meta y no recibe firma MovIA.
+Los webhooks salientes conservan su payload actual y se firman con el valor `secret_signature` de su fila. Si el valor está vacío, el worker crea un secreto aleatorio de 32 bytes (64 caracteres hexadecimales) de forma atómica. Chatwoot (`chat.moviatech.com.mx`, además del hostname legado `chat.moviatech.com`) conserva el flujo existente de body y firma originales de Meta y no recibe firma MovIA.
 
 Headers enviados a los demás destinos:
 

@@ -110,8 +110,13 @@ for (const { name, signer, mapping } of signerModules) {
 
 test('Chatwoot exception only matches the intended hostname', () => {
   const { isChatwootUrl } = signerModules[0].signer;
+  assert.equal(
+    isChatwootUrl('https://chat.moviatech.com.mx/webhooks/whatsapp/+5218184705702'),
+    true
+  );
   assert.equal(isChatwootUrl('https://chat.moviatech.com/webhook'), true);
   assert.equal(isChatwootUrl('https://tenant.chat.moviatech.com/webhook'), true);
+  assert.equal(isChatwootUrl('https://chat.moviatech.com.mx.attacker.example/webhook'), false);
   assert.equal(isChatwootUrl('https://chat.moviatech.com.attacker.example/webhook'), false);
   assert.equal(isChatwootUrl('https://attacker.example/?next=chat.moviatech.com'), false);
 });

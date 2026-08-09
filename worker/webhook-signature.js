@@ -15,7 +15,10 @@ function generateSigningSecret() {
 function isChatwootUrl(url) {
   try {
     const hostname = new URL(url).hostname.toLowerCase();
-    return hostname === 'chat.moviatech.com' || hostname.endsWith('.chat.moviatech.com');
+    const chatwootHosts = ['chat.moviatech.com.mx', 'chat.moviatech.com'];
+    return chatwootHosts.some(
+      (chatwootHost) => hostname === chatwootHost || hostname.endsWith(`.${chatwootHost}`)
+    );
   } catch {
     return false;
   }
