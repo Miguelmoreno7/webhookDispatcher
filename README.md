@@ -9,9 +9,19 @@ Dispatcher/worker para WhatsApp y Meta (Messenger/Instagram) usando Express + Re
   * `VERIFY_TOKEN` (verificación WhatsApp)
   * `META_VERIFY_TOKEN` (verificación Meta)
   * `META_APP_SECRET` (App Secret usado para validar `X-Hub-Signature-256` antes de encolar eventos)
-  * `REDIS_URL` (por ejemplo `redis://:RealUnited93@redis:6379`)
+  * `WEBHOOK_REDIS_PASSWORD` (secreto obligatorio de Dokploy; usar un valor nuevo, fuerte y URL-safe, por ejemplo el resultado de `openssl rand -hex 32`)
   * `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` (workers de WhatsApp, Facebook e Instagram)
   * `CRM_WEBHOOK_URL`, `CRM_WEBHOOK_TIMEOUT_MS` (puente opcional hacia MovIA CRM; requiere una fila con el mismo URL en la tabla del canal)
+
+Compose construye `REDIS_URL` internamente con `webhook-redis:6379`. No se debe configurar un hostname `redis` genérico ni guardar la contraseña en el repositorio.
+
+Ejemplo de configuración (el valor real se guarda como secreto en Dokploy):
+
+```dotenv
+WEBHOOK_REDIS_PASSWORD=<strong-url-safe-password>
+# URL interna construida por Compose:
+REDIS_URL=redis://:${WEBHOOK_REDIS_PASSWORD}@webhook-redis:6379
+```
 
 ## Seguridad de webhooks
 
@@ -53,7 +63,9 @@ Servicios:
 * `worker_meta` (Messenger)
 * `worker_instagram`
 * `non_message_worker`
-* `redis`
+* `webhook-redis`
+
+`webhook-redis` y los cuatro workers solo pertenecen a la red privada `webhook-backend`. `ingress` pertenece a `webhook-backend` y `dokploy-network`; es el único servicio de esta aplicación que Traefik necesita alcanzar. Redis no publica ningún puerto del host y persiste sus datos en el volumen `webhook-redis-data` con AOF habilitado.
 
 ## Probar evento Meta (POST)
 
@@ -62,7 +74,7 @@ Los ejemplos deben incluir un `X-Hub-Signature-256` válido calculado con `META_
 Ejemplo Messenger:
 
 ```bash
-curl -X POST http://localhost:3000/webhook/meta \
+curl -X POST https://webhook.moviatech.com.mx/webhook/meta \
   -H "Content-Type: application/json" \
   -d '{
     "object": "page",
@@ -86,7 +98,7 @@ curl -X POST http://localhost:3000/webhook/meta \
 Ejemplo Instagram:
 
 ```bash
-curl -X POST http://localhost:3000/webhook/meta \
+curl -X POST https://webhook.moviatech.com.mx/webhook/meta \
   -H "Content-Type: application/json" \
   -d '{
     "object": "instagram",
@@ -112,7 +124,7 @@ Los workers `worker_meta` (Messenger) y `worker_instagram` normalizan y loguean 
 ## Pruebas
 
 ```bash
-node --test tests/signatures.test.js
+node --test tests/*.test.js
 ```
 
 ## Colas en Redis
@@ -120,3 +132,58 @@ node --test tests/signatures.test.js
 * WhatsApp: `events`
 * Messenger: `events_messenger`
 * Instagram: `events_instagram`
+* Eventos administrativos de WhatsApp: `non_message`
+
+## Migración desde el Redis compartido
+
+Esta limpieza se realiza una sola vez durante el despliegue que introduce `webhook-backend`. Detén primero `ingress` para impedir nuevos eventos y después detén los cuatro workers:
+
+```bash
+docker compose stop ingress
+docker compose stop worker_whatsapp worker_meta worker_instagram non_message_worker
+```
+
+Elimina únicamente estas cuatro claves tanto del Redis de Sales como del Redis anterior de Webhook:
+
+```text
+events
+events_messenger
+events_instagram
+non_message
+```
+
+Ejecuta el siguiente comando dentro de cada uno de esos dos contenedores, sustituyendo el nombre del contenedor y obteniendo la contraseña desde su gestor de secretos:
+
+```bash
+docker exec <redis-container> redis-cli --no-auth-warning \
+  -a '<redis-password>' \
+  UNLINK events events_messenger events_instagram non_message
+```
+
+No uses `FLUSHDB` ni `FLUSHALL`. La limpieza en ambos Redis es obligatoria porque el conflicto DNS colocó eventos de Webhook en Sales Redis y también dejó claves obsoletas en el Redis anterior de Webhook.
+
+No reutilices la credencial que antes estaba en el repositorio. Después de actualizar el repositorio y configurar un nuevo `WEBHOOK_REDIS_PASSWORD` en Dokploy, inicia los servicios en este orden. `--remove-orphans` elimina el contenedor Redis anterior de este proyecto después de haber limpiado sus claves; no debe aplicarse al proyecto de Sales:
+
+```bash
+docker compose up -d --remove-orphans webhook-redis
+docker compose up -d worker_whatsapp worker_meta worker_instagram non_message_worker
+docker compose up -d ingress
+```
+
+Comprueba que cada contenedor de Webhook resuelve exactamente una dirección para `webhook-redis`:
+
+```bash
+docker compose exec -T ingress node -e \
+  "require('dns').promises.lookup('webhook-redis',{all:true}).then(console.log)"
+```
+
+Repite la comprobación para cada worker. Finalmente, comprueba que las cuatro colas comienzan en cero:
+
+```bash
+docker compose exec -T webhook-redis sh -c '
+  for key in events events_messenger events_instagram non_message; do
+    printf "%s: " "$key"
+    redis-cli --no-auth-warning -a "$WEBHOOK_REDIS_PASSWORD" LLEN "$key"
+  done
+'
+```

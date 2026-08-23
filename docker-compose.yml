@@ -1,23 +1,30 @@
 version: '3.8'
 
+x-redis-dependency: &redis-dependency
+  webhook-redis:
+    condition: service_healthy
+
+x-redis-environment: &redis-environment
+  REDIS_URL: "redis://:${WEBHOOK_REDIS_PASSWORD:?WEBHOOK_REDIS_PASSWORD is required}@webhook-redis:6379"
+
 services:
   ingress:
     build: ./dispatcher
-    container_name: webhook_dispatcher
-    ports:
-      - 3000
+    expose:
+      - "3000"
     environment:
       VERIFY_TOKEN: ${VERIFY_TOKEN}
       META_VERIFY_TOKEN: ${META_VERIFY_TOKEN}
       META_APP_SECRET: ${META_APP_SECRET}
-      REDIS_URL: redis://:RealUnited93@redis:6379
-    depends_on:
-      - redis
+      <<: *redis-environment
+    depends_on: *redis-dependency
     restart: always
     networks:
+      - webhook-backend
       - dokploy-network
     labels:
       - traefik.enable=true
+      - traefik.docker.network=dokploy-network
       - traefik.http.routers.dispatcher.rule=Host(`webhook.moviatech.com.mx`)
       - traefik.http.routers.dispatcher.entrypoints=websecure
       - traefik.http.routers.dispatcher.tls.certResolver=letsencrypt
@@ -25,80 +32,90 @@ services:
 
   worker_whatsapp:
     build: ./worker
-    container_name: webhook_worker
     environment:
-      REDIS_URL: redis://:RealUnited93@redis:6379
+      <<: *redis-environment
       DB_HOST: ${DB_HOST}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
       CRM_WEBHOOK_URL: ${CRM_WEBHOOK_URL:-}
       CRM_WEBHOOK_TIMEOUT_MS: ${CRM_WEBHOOK_TIMEOUT_MS:-3000}
-    depends_on:
-      - redis
+    depends_on: *redis-dependency
     restart: always
     networks:
-      - dokploy-network
+      - webhook-backend
 
   worker_meta:
     build: ./meta_worker
-    container_name: webhook_meta_worker
     environment:
-      REDIS_URL: redis://:RealUnited93@redis:6379
+      <<: *redis-environment
       DB_HOST: ${DB_HOST}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
       CRM_WEBHOOK_URL: ${CRM_WEBHOOK_URL:-}
       CRM_WEBHOOK_TIMEOUT_MS: ${CRM_WEBHOOK_TIMEOUT_MS:-3000}
-    depends_on:
-      - redis
+    depends_on: *redis-dependency
     restart: always
     networks:
-      - dokploy-network
+      - webhook-backend
 
   worker_instagram:
     build: ./instagram_worker
-    container_name: webhook_instagram_worker
     environment:
-      REDIS_URL: redis://:RealUnited93@redis:6379
+      <<: *redis-environment
       DB_HOST: ${DB_HOST}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
       CRM_WEBHOOK_URL: ${CRM_WEBHOOK_URL:-}
       CRM_WEBHOOK_TIMEOUT_MS: ${CRM_WEBHOOK_TIMEOUT_MS:-3000}
-    depends_on:
-      - redis
+    depends_on: *redis-dependency
     restart: always
     networks:
-      - dokploy-network
-      
+      - webhook-backend
+
   non_message_worker:
     build: ./non_message_worker
-    container_name: nonmessage_worker
     environment:
-      REDIS_URL: redis://:RealUnited93@redis:6379
+      <<: *redis-environment
       DB_HOST: ${DB_HOST}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
-    depends_on:
-      - redis
+    depends_on: *redis-dependency
     restart: always
     networks:
-      - dokploy-network
-      
-  redis:
+      - webhook-backend
+
+  webhook-redis:
     image: redis:alpine
-    container_name: redis_queue
-    command: ["redis-server", "--requirepass", "RealUnited93"]
-    ports:
-      - "6379:6379"
+    environment:
+      WEBHOOK_REDIS_PASSWORD: ${WEBHOOK_REDIS_PASSWORD:?WEBHOOK_REDIS_PASSWORD is required}
+    command:
+      - /bin/sh
+      - -c
+      - exec redis-server --requirepass "$$WEBHOOK_REDIS_PASSWORD" --appendonly yes
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - redis-cli --no-auth-warning -a "$$WEBHOOK_REDIS_PASSWORD" ping | grep -q PONG
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    volumes:
+      - webhook-redis-data:/data
     restart: always
     networks:
-      - dokploy-network
+      - webhook-backend
 
 networks:
+  webhook-backend:
+    driver: bridge
   dokploy-network:
     external: true
+
+volumes:
+  webhook-redis-data:
+    name: webhook-redis-data
